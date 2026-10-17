@@ -1,0 +1,9 @@
+# Bot core
+aiogram==3.13.1
+python-dotenv==1.0.1
+
+# Scheduler (для scheduler.py)
+APScheduler==3.10.4
+
+# AI day planner (для day_planner.py)
+httpx==0.27.2

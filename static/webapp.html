@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Planner</title>
+<!-- Telegram WebApp SDK -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+/* ── Токены из Telegram темы ── */
+:root {
+  --tg-bg:         var(--tg-theme-bg-color, #1a1a2e);
+  --tg-bg2:        var(--tg-theme-secondary-bg-color, #16213e);
+  --tg-text:       var(--tg-theme-text-color, #e0e0e0);
+  --tg-hint:       var(--tg-theme-hint-color, #b0b0b0);
+  --tg-link:       var(--tg-theme-link-color, #2196f3);
+  --tg-btn:        var(--tg-theme-button-color, #e94560);
+  --tg-btn-text:   var(--tg-theme-button-text-color, #ffffff);
+  --accent:        var(--tg-btn, #e94560);
+  --green:         #4caf50;
+  --yellow:        #ffc107;
+  --radius:        12px;
+  --radius-sm:     8px;
+  --transition:    0.22s ease;
+}
+
+*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+
+body {
+  font-family: -apple-system, 'Segoe UI', sans-serif;
+  background: var(--tg-bg);
+  color: var(--tg-text);
+  min-height: 100vh;
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+  overflow-x: hidden;
+}
+
+/* ── Nav ── */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; background: var(--tg-bg2);
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  overflow-x: auto; scrollbar-width: none;
+}
+.nav::-webkit-scrollbar { display: none; }
+.nav-btn {
+  flex: 1; padding: 12px 4px; border: none; background: transparent;
+  color: var(--tg-hint); font-size: .8rem; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: color var(--transition);
+  position: relative; min-width: 64px;
+}
+.nav-btn.active { color: var(--tg-text); }
+.nav-btn.active::after {
+  content: ''; position: absolute; bottom: 0; left: 12px; right: 12px;
+  height: 2px; background: var(--accent); border-radius: 1px;
+}
+
+/* ── Sections ── */
+.section { display: none; padding: 14px; animation: fadein .2s ease; }
+.section.active { display: block; }
+@keyframes fadein { from {opacity:0;transform:translateY(6px)} to {opacity:1;transform:none} }
+
+/* ── Cards ── */
+.card {
+  background: var(--tg-bg2);
+  border-radius: var(--radius); padding: 14px;
+  margin-bottom: 10px;
+}
+.card-title {
+  font-size: .75rem; font-weight: 700;
+  color: var(--tg-hint); text-transform: uppercase;
+  letter-spacing: .6px; margin-bottom: 6px;
+}
+
+/* ── Stats row ── */
+.stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 12px; }
+.stat-cell {
+  background: var(--tg-bg2); border-radius: var(--radius-sm);
+  padding: 10px 8px; text-align: center;
+}
+.stat-val { font-size: 1.4rem; font-weight: 800; }
+.stat-lbl { font-size: .7rem; color: var(--tg-hint); margin-top: 2px; }
+
+/* ── Habit rows ── */
+.habit-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.habit-item:last-child { border-bottom: none; }
+.habit-emoji { font-size: 1.2rem; flex-shrink: 0; }
+.habit-info { flex: 1; min-width: 0; }
+.habit-name { font-weight: 600; font-size: .95rem; }
+.habit-streak { font-size: .75rem; color: var(--yellow); }
+.habit-toggle {
+  width: 44px; height: 26px; border-radius: 13px;
+  border: none; cursor: pointer; position: relative;
+  transition: background var(--transition);
+  flex-shrink: 0;
+}
+.habit-toggle.on  { background: var(--green); }
+.habit-toggle.off { background: rgba(255,255,255,.15); }
+.habit-toggle::after {
+  content: ''; position: absolute; top: 3px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: white; transition: left var(--transition);
+}
+.habit-toggle.on::after  { left: 21px; }
+.habit-toggle.off::after { left: 3px; }
+
+/* ── Progress bar ── */
+.pbar-wrap { height: 6px; background: rgba(255,255,255,.1); border-radius: 3px; margin-top: 4px; }
+.pbar-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
+
+/* ── Tasks ── */
+.task-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.task-item:last-child { border-bottom: none; }
+.task-check {
+  width: 22px; height: 22px; border-radius: 6px; border: 2px solid rgba(255,255,255,.2);
+  flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all var(--transition); margin-top: 1px; font-size: .9rem;
+}
+.task-check.done { background: var(--green); border-color: var(--green); }
+.task-body { flex: 1; min-width: 0; }
+.task-text { font-size: .92rem; line-height: 1.4; }
+.task-text.done { text-decoration: line-through; color: var(--tg-hint); }
+.task-meta { display: flex; gap: 6px; margin-top: 3px; flex-wrap: wrap; }
+.prio-tag {
+  font-size: .68rem; padding: 1px 6px; border-radius: 4px; font-weight: 700;
+}
+.prio-high   { background: rgba(233,69,96,.25);  color: #e94560; }
+.prio-medium { background: rgba(255,193,7,.25);  color: #ffc107; }
+.prio-low    { background: rgba(76,175,80,.25);  color: #4caf50; }
+.deadline-tag { font-size: .68rem; color: var(--tg-hint); }
+.deadline-tag.over { color: #e94560; }
+
+/* ── Quick add ── */
+.quick-add { margin-bottom: 12px; }
+.qa-row { display: flex; gap: 8px; }
+.qa-input {
+  flex: 1; padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--tg-bg2); border: 1px solid rgba(255,255,255,.1);
+  color: var(--tg-text); font-size: .9rem;
+}
+.qa-input:focus { outline: none; border-color: var(--accent); }
+.qa-input::placeholder { color: var(--tg-hint); }
+.qa-btn {
+  padding: 10px 16px; border-radius: var(--radius-sm);
+  background: var(--accent); color: var(--tg-btn-text);
+  border: none; font-weight: 700; cursor: pointer;
+  font-size: .9rem; transition: opacity var(--transition);
+}
+.qa-btn:active { opacity: .8; }
+
+/* ── Finance ── */
+.budget-info { display: flex; justify-content: space-between; margin-bottom: 8px; }
+.budget-spent { font-size: 1.2rem; font-weight: 800; }
+.budget-remain { font-size: .85rem; color: var(--tg-hint); align-self: flex-end; }
+
+.exp-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.exp-item:last-child { border-bottom: none; }
+.exp-left { display: flex; flex-direction: column; gap: 2px; }
+.exp-name { font-size: .9rem; font-weight: 600; }
+.exp-cat  { font-size: .72rem; color: var(--tg-hint); }
+.exp-amt  { font-weight: 700; font-size: .95rem; }
+
+/* ── Summary ── */
+.summary-block {
+  background: linear-gradient(135deg, rgba(233,69,96,.15), rgba(33,150,243,.1));
+  border-radius: var(--radius); padding: 16px; margin-bottom: 10px;
+  border: 1px solid rgba(233,69,96,.2);
+}
+.summary-title { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+.summary-line { font-size: .85rem; color: var(--tg-hint); margin-bottom: 4px; }
+.summary-line span { color: var(--tg-text); font-weight: 600; }
+
+/* ── Spinner ── */
+.spinner {
+  display: inline-block; width: 18px; height: 18px;
+  border: 2px solid rgba(255,255,255,.2); border-top-color: var(--tg-text);
+  border-radius: 50%; animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Toast ── */
+#tg-toast {
+  position: fixed; bottom: calc(env(safe-area-inset-bottom,0px) + 70px);
+  left: 50%; transform: translateX(-50%) translateY(20px);
+  background: rgba(30,30,60,.95); color: #fff;
+  padding: 8px 16px; border-radius: 20px; font-size: .85rem;
+  opacity: 0; transition: all .25s; pointer-events: none; white-space: nowrap;
+  backdrop-filter: blur(8px);
+}
+#tg-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav class="nav" id="nav">
+  <button class="nav-btn active" data-sec="overview">📊 Обзор</button>
+  <button class="nav-btn" data-sec="habits">🔥 Привычки</button>
+  <button class="nav-btn" data-sec="tasks">✅ Задачи</button>
+  <button class="nav-btn" data-sec="finance">💰 Финансы</button>
+</nav>
+
+<!-- ══ OVERVIEW ══ -->
+<section class="section active" id="sec-overview">
+  <div class="stats-row" id="stats-row"></div>
+  <div class="card" id="today-habits-card">
+    <div class="card-title">🔥 Привычки сегодня</div>
+    <div id="today-habits"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">✅ Задачи</div>
+    <div id="today-tasks"></div>
+  </div>
+  <div class="summary-block" id="summary-block" style="display:none">
+    <div class="summary-title">📊 Итог дня</div>
+    <div id="summary-content"></div>
+  </div>
+</section>
+
+<!-- ══ HABITS ══ -->
+<section class="section" id="sec-habits">
+  <div class="card">
+    <div class="card-title">Отмечай каждый день</div>
+    <div id="habits-full-list"></div>
+  </div>
+</section>
+
+<!-- ══ TASKS ══ -->
+<section class="section" id="sec-tasks">
+  <div class="quick-add">
+    <div class="qa-row">
+      <input class="qa-input" id="new-task-inp" placeholder="Быстрая задача..." />
+      <button class="qa-btn" id="btn-add-task">+</button>
+    </div>
+  </div>
+  <div id="tasks-full-list"></div>
+</section>
+
+<!-- ══ FINANCE ══ -->
+<section class="section" id="sec-finance">
+  <div class="card">
+    <div class="card-title">💰 Бюджет месяца</div>
+    <div class="budget-info">
+      <div>
+        <div class="budget-spent" id="fin-spent">0 ₽</div>
+        <div style="font-size:.75rem;color:var(--tg-hint)">потрачено</div>
+      </div>
+      <div style="text-align:right">
+        <div class="budget-spent" id="fin-budget" style="color:var(--tg-hint);font-size:1rem">0 ₽</div>
+        <div style="font-size:.75rem;color:var(--tg-hint)">бюджет</div>
+      </div>
+    </div>
+    <div class="pbar-wrap">
+      <div class="pbar-fill" id="budget-fill" style="width:0%;background:var(--green)"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">📋 Расходы</div>
+    <div id="expenses-list"></div>
+  </div>
+  <!-- Quick add expense -->
+  <div class="card">
+    <div class="card-title">➕ Добавить расход</div>
+    <div class="qa-row" style="flex-wrap:wrap;gap:6px">
+      <input class="qa-input" id="exp-name-inp" placeholder="Описание" style="flex:2;min-width:120px">
+      <input class="qa-input" id="exp-amt-inp" type="number" placeholder="Сумма ₽" style="flex:1;min-width:80px">
+      <button class="qa-btn" id="btn-add-exp">+</button>
+    </div>
+  </div>
+</section>
+
+<div id="tg-toast"></div>
+
+<script>
+'use strict';
+const tg = window.Telegram?.WebApp;
+
+// ── Init Telegram ──
+if (tg) {
+  tg.ready();
+  tg.expand();
+  tg.enableClosingConfirmation();
+}
+
+// ── State (приходит из бота через initData / window.__data) ──
+let S = window.__data || {
+  habits: [
+    { name:'Зарядка',   emoji:'💪', days: Array(31).fill(false) },
+    { name:'Читать',    emoji:'📚', days: Array(31).fill(false) },
+    { name:'Медитация', emoji:'🧘', days: Array(31).fill(false) },
+  ],
+  tasks: [
+    { text:'Пример задачи', priority:'high',   done:false, deadline:'' },
+    { text:'Другая задача', priority:'medium', done:false, deadline:'' },
+  ],
+  expenses: [],
+  budget: 50000,
+  new_tasks: [],
+  new_expenses: [],
+};
+
+// Нормализация
+S.habits.forEach(h => {
+  if (!Array.isArray(h.days) || h.days.length < 31)
+    h.days = Array(31).fill(false).map((v,i) => (h.days||[])[i] || false);
+});
+if (!Array.isArray(S.expenses)) S.expenses = [];
+if (!Array.isArray(S.new_tasks)) S.new_tasks = [];
+if (!Array.isArray(S.new_expenses)) S.new_expenses = [];
+
+const TODAY_IDX = new Date().getDate() - 1;
+
+// ── Toast ──
+let _tt;
+function toast(msg, dur=2200) {
+  const el = document.getElementById('tg-toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(_tt);
+  _tt = setTimeout(()=> el.classList.remove('show'), dur);
+}
+
+// ── Haptic ──
+function haptic(style='light') {
+  tg?.HapticFeedback?.impactOccurred(style);
+}
+
+// ── Calc helpers ──
+function calcStreak(days) {
+  let s=0, idx=Math.min(TODAY_IDX, days.length-1);
+  for (let i=idx; i>=0; i--) { if(days[i]) s++; else break; }
+  return s;
+}
+function calcRate(days) {
+  const cnt = TODAY_IDX+1;
+  return cnt>0 ? days.slice(0,cnt).filter(Boolean).length/cnt : 0;
+}
+
+// ── OVERVIEW ──
+function renderOverview() {
+  const habitsDone = S.habits.filter(h=>h.days[TODAY_IDX]).length;
+  const tasksDone  = S.tasks.filter(t=>t.done).length;
+  const spent = S.expenses.reduce((s,e)=>s+(e.amount||0),0);
+  const spentK = (spent/1000).toFixed(0);
+
+  document.getElementById('stats-row').innerHTML = `
+    <div class="stat-cell">
+      <div class="stat-val" style="color:var(--accent)">${habitsDone}/${S.habits.length}</div>
+      <div class="stat-lbl">Привычки</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-val" style="color:var(--green)">${tasksDone}/${S.tasks.length}</div>
+      <div class="stat-lbl">Задачи</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-val" style="color:var(--yellow)">${spentK}k₽</div>
+      <div class="stat-lbl">Расходы</div>
+    </div>
+  `;
+
+  // Привычки overview
+  document.getElementById('today-habits').innerHTML = S.habits.map((h,i) => {
+    const done = h.days[TODAY_IDX];
+    const rate = Math.round(calcRate(h.days)*100);
+    return `
+    <div class="habit-item">
+      <span class="habit-emoji">${h.emoji}</span>
+      <div class="habit-info">
+        <div class="habit-name">${h.name}</div>
+        <div class="pbar-wrap" style="margin-top:4px">
+          <div class="pbar-fill" style="width:${rate}%;background:${rate>=70?'var(--green)':rate>=40?'var(--yellow)':'var(--accent)'}"></div>
+        </div>
+      </div>
+      <button class="habit-toggle ${done?'on':'off'}" data-h="${i}" aria-label="${done?'Снять':'Отметить'}"></button>
+    </div>`;
+  }).join('');
+
+  // Задачи overview (только активные, топ-5)
+  const active = S.tasks.filter(t=>!t.done).slice(0,5);
+  document.getElementById('today-tasks').innerHTML = active.length
+    ? active.map((t,i) => `<div class="task-item">
+        <div class="task-check" data-ot="${S.tasks.indexOf(t)}"></div>
+        <div class="task-body"><div class="task-text">${esc(t.text)}</div></div>
+        <span class="prio-tag prio-${t.priority||'medium'}">${{high:'🔴',medium:'🟡',low:'🟢'}[t.priority||'medium']}</span>
+      </div>`).join('')
+    : '<div style="color:var(--tg-hint);font-size:.85rem;padding:8px 0">Нет активных задач 🎉</div>';
+
+  bindHabitToggles('today-habits');
+  bindTaskChecks('today-tasks', true);
+}
+
+// ── HABITS FULL ──
+function renderHabits() {
+  document.getElementById('habits-full-list').innerHTML = S.habits.map((h,i) => {
+    const done   = h.days[TODAY_IDX];
+    const streak = calcStreak(h.days);
+    const rate   = Math.round(calcRate(h.days)*100);
+    return `
+    <div class="habit-item">
+      <span class="habit-emoji">${h.emoji}</span>
+      <div class="habit-info">
+        <div class="habit-name">${h.name}</div>
+        <div class="habit-streak">${streak>0 ? '🔥'+streak+' дн' : ''} &nbsp; ${rate}%</div>
+        <div class="pbar-wrap" style="margin-top:4px">
+          <div class="pbar-fill" style="width:${rate}%;background:${rate>=70?'var(--green)':rate>=40?'var(--yellow)':'var(--accent)'}"></div>
+        </div>
+      </div>
+      <button class="habit-toggle ${done?'on':'off'}" data-h="${i}"></button>
+    </div>`;
+  }).join('');
+  bindHabitToggles('habits-full-list');
+}
+
+function bindHabitToggles(containerId) {
+  document.getElementById(containerId).querySelectorAll('.habit-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = +btn.dataset.h;
+      S.habits[i].days[TODAY_IDX] = !S.habits[i].days[TODAY_IDX];
+      haptic('light');
+      renderOverview(); renderHabits();
+      updateMainButton();
+    });
+  });
+}
+
+// ── TASKS FULL ──
+function renderTasks() {
+  const all = S.tasks;
+  document.getElementById('tasks-full-list').innerHTML = all.length
+    ? all.map((t,i) => {
+        const over = !t.done && t.deadline && new Date(t.deadline)<new Date();
+        return `
+        <div class="card task-item" style="margin-bottom:6px;border-radius:var(--radius-sm)">
+          <div class="task-check ${t.done?'done':''}" data-ti="${i}">${t.done?'✓':''}</div>
+          <div class="task-body">
+            <div class="task-text ${t.done?'done':''}">${esc(t.text)}</div>
+            <div class="task-meta">
+              <span class="prio-tag prio-${t.priority||'medium'}">${t.priority||'medium'}</span>
+              ${t.deadline ? `<span class="deadline-tag ${over?'over':''}">📅${t.deadline}${over?' ⚠️':''}</span>` : ''}
+            </div>
+          </div>
+        </div>`;
+      }).join('')
+    : '<div style="color:var(--tg-hint);text-align:center;padding:24px">Нет задач</div>';
+  bindTaskChecks('tasks-full-list', false);
+}
+
+function bindTaskChecks(containerId, isOverview) {
+  document.getElementById(containerId).querySelectorAll('.task-check').forEach(el => {
+    el.addEventListener('click', () => {
+      const i = +el.dataset.ot ?? +el.dataset.ti;
+      const idx = isOverview ? +el.dataset.ot : +el.dataset.ti;
+      if (S.tasks[idx]) {
+        S.tasks[idx].done = !S.tasks[idx].done;
+        haptic('medium');
+        renderOverview(); renderTasks();
+        updateMainButton();
+        toast(S.tasks[idx].done ? '✅ Выполнено!' : '↩️ Снято');
+      }
+    });
+  });
+}
+
+document.getElementById('btn-add-task').addEventListener('click', () => {
+  const txt = document.getElementById('new-task-inp').value.trim();
+  if (!txt) { toast('⚠️ Введите задачу'); return; }
+  const t = { text:txt, priority:'medium', done:false, deadline:'' };
+  S.tasks.push(t);
+  S.new_tasks.push(t);
+  document.getElementById('new-task-inp').value = '';
+  haptic('light');
+  renderTasks(); renderOverview(); updateMainButton();
+  toast('✅ Добавлено');
+});
+document.getElementById('new-task-inp').addEventListener('keydown', e => {
+  if (e.key==='Enter') document.getElementById('btn-add-task').click();
+});
+
+// ── FINANCE ──
+function renderFinance() {
+  const spent = S.expenses.reduce((s,e)=>s+(e.amount||0),0);
+  const budget = S.budget || 1;
+  const pct = Math.min(spent/budget*100, 100);
+
+  document.getElementById('fin-spent').textContent = spent.toLocaleString('ru')+' ₽';
+  document.getElementById('fin-budget').textContent = budget.toLocaleString('ru')+' ₽';
+  const fill = document.getElementById('budget-fill');
+  fill.style.width = pct+'%';
+  fill.style.background = pct>100 ? 'var(--accent)' : pct>80 ? 'var(--yellow)' : 'var(--green)';
+
+  document.getElementById('expenses-list').innerHTML = S.expenses.length
+    ? [...S.expenses].reverse().slice(0,20).map(e => `
+      <div class="exp-item">
+        <div class="exp-left">
+          <div class="exp-name">${esc(e.name||e.desc||'')}</div>
+          <div class="exp-cat">${esc(e.category||e.cat||'Прочее')}</div>
+        </div>
+        <div class="exp-amt">${(e.amount||0).toLocaleString('ru')} ₽</div>
+      </div>`).join('')
+    : '<div style="color:var(--tg-hint);text-align:center;padding:16px">Нет расходов</div>';
+}
+
+document.getElementById('btn-add-exp').addEventListener('click', () => {
+  const name = document.getElementById('exp-name-inp').value.trim();
+  const amt  = parseFloat(document.getElementById('exp-amt-inp').value);
+  if (!name || !amt || amt<=0) { toast('⚠️ Заполните поля'); return; }
+  const exp = { name, amount:amt, category:'Прочее', date: new Date().toISOString().slice(0,10) };
+  S.expenses.push(exp);
+  S.new_expenses.push(exp);
+  document.getElementById('exp-name-inp').value = '';
+  document.getElementById('exp-amt-inp').value = '';
+  haptic('light');
+  renderFinance(); updateMainButton();
+  toast(`💸 ${name}: ${amt.toLocaleString('ru')} ₽`);
+});
+
+// ── Telegram MainButton «Сохранить» ──
+function updateMainButton() {
+  if (!tg?.MainButton) return;
+  tg.MainButton.setText('💾 Сохранить изменения');
+  tg.MainButton.show();
+  tg.MainButton.color = tg.themeParams?.button_color || '#e94560';
+}
+
+if (tg?.MainButton) {
+  tg.MainButton.onClick(() => {
+    sendDataToBot();
+  });
+}
+
+function sendDataToBot() {
+  if (!tg) { toast('⚠️ Не в Telegram'); return; }
+  tg.MainButton.showProgress(false);
+
+  // Формируем payload для бота
+  const payload = {
+    habits: S.habits.map(h => ({ name:h.name, emoji:h.emoji, days:h.days })),
+    tasks:  S.tasks.map(t => ({ text:t.text, priority:t.priority, done:t.done, deadline:t.deadline||'' })),
+    new_tasks:    S.new_tasks,
+    new_expenses: S.new_expenses,
+    budget: S.budget,
+  };
+
+  tg.sendData(JSON.stringify(payload));
+  // Бот получит данные через web_app_data update и закроет webapp
+}
+
+// ── BackButton ──
+if (tg?.BackButton) {
+  // Показываем на всех секциях кроме overview
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.sec === 'overview') tg.BackButton.hide();
+      else tg.BackButton.show();
+    });
+  });
+  tg.BackButton.onClick(() => {
+    switchSection('overview');
+    tg.BackButton.hide();
+  });
+}
+
+// ── Nav ──
+function switchSection(id) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.sec===id));
+  document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id==='sec-'+id));
+  if (id==='habits')  renderHabits();
+  if (id==='tasks')   renderTasks();
+  if (id==='finance') renderFinance();
+  if (id==='overview') renderOverview();
+}
+
+document.getElementById('nav').querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchSection(btn.dataset.sec));
+});
+
+// ── Utils ──
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Boot ──
+renderOverview();
+</script>
+</body>
+</html>
