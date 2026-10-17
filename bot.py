@@ -35,17 +35,12 @@ main_router = Router()
 
 @main_router.message(CommandStart())
 async def cmd_start(message: Message):
-    kb = ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="📱 Открыть планнер", web_app=WebAppInfo(url=WEBAPP_URL))]],
-        resize_keyboard=True,
-    ) if WEBAPP_URL else None
     await message.answer(
         "👋 Привет! Я планнер-бот.\n\n"
         "Помогу отслеживать задачи, привычки и финансы.\n\n"
         "Команды:\n"
         "/start — это меню\n"
-        "/app — открыть веб-приложение",
-        reply_markup=kb,
+        "/help — справка"
     )
 
 @main_router.message(Command("help"))
